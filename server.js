@@ -1,5 +1,7 @@
 import net from "net";
 const PORT = 6380;
+const store = new Map();
+const ttlms = 300000;
 
 const server = net.createServer((socket) => {
   console.log("client connected!");
@@ -9,10 +11,56 @@ const server = net.createServer((socket) => {
   socket.on("data", (data) => {
     let chunk = data.toString();
     parseInstance.feed(chunk);
-    console.log(`Greeting from ${chunk}`);
-    socket.write("+OK\r\n");
+    // console.log(`Greeting from ${chunk}`);
+    // socket.write("+OK\r\n");
   });
 });
+const handlers = {
+  PING: (args) => {
+    return resp.simpleString("PONG");
+  },
+  SET: (args) => {
+    store.set(args[0], { data: args[1], expiresAt: null });
+    return resp.simpleString("OK");
+  },
+  GET: (args) => {
+    const lookup = store.get(args[0]);
+    if (!lookup) return resp.bulkString(null);
+    let data = lookup.data;
+    const expiresAt = lookup.expiresAt;
+    if (expiresAt == null) {
+      return resp.bulkString(data);
+    }
+    if (lookup) {
+      let currentTime = Date.now();
+      if (currentTime >= expiresAt) {
+        store.delete(args[0]);
+        return resp.bulkString(null);
+      } else {
+        return resp.bulkString(data);
+      }
+    }
+  },
+  DEL: (args) => {
+    let count = 0;
+    for (let i = 0; i < args.length; i++) {
+      const lookup = store.has(args[i]);
+      if (lookup) {
+        store.delete(args[i]);
+        count++;
+      }
+    }
+    return resp.integer(count);
+  },
+  EXISTS: (args) => {
+    let count = 0;
+    args.forEach((key) => {
+      if (store.has(key)) count++;
+    });
+    return resp.integer(count);
+  },
+  EXISTS:
+};
 const resp = {
   arrays,
   bulkString,
